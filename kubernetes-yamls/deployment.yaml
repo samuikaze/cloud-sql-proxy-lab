@@ -1,0 +1,113 @@
+# deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloud-sql-auth-proxy-lab
+  namespace: monitoring-labs
+  labels:
+    app: cloud-sql-auth-proxy-lab
+spec:
+  replicas: 1
+  # strategy:
+  #   type: Recreate
+  selector:
+    matchLabels:
+      app: cloud-sql-auth-proxy-lab
+  template:
+    metadata:
+      labels:
+        app: cloud-sql-auth-proxy-lab
+    spec:
+      volumes:
+        - name: service-account-secret
+          secret:
+            secretName: gsa-secret
+      containers:
+        - name: cloud-sql-auth-proxy-lab
+          # 請將 DOCKER_HUB_USERNAME 取代為正確的帳號名稱
+          image: DOCKER_HUB_USERNAME/cloud-sql-auth-proxy-lab:v1
+          resources:
+            requests:
+              memory: 512Mi
+              cpu: 150m
+            limits:
+              memory: 512Mi
+              cpu: 150m
+          ports:
+            - containerPort: 80
+              protocol: TCP
+          env:
+            - name: ConnectionStrings__CSAPLab
+              valueFrom:
+                secretKeyRef:
+                  name: csap-lab-secrets
+                  key: database.host
+            - name: Credentials__CSAPLab__Username
+              valueFrom:
+                secretKeyRef:
+                  name: csap-lab-secrets
+                  key: database.username
+            - name: Credentials__CSAPLab__Password
+              valueFrom:
+                secretKeyRef:
+                  name: csap-lab-secrets
+                  key: database.password
+            - name: Swagger__RoutePrefix
+              valueFrom:
+                configMapKeyRef:
+                  name: csap-lab-configs
+                  key: swagger.route.prefix
+        - name: cloud-sql-proxy
+          # image: gcr.io/cloudsql_docker/gce-proxy:latest
+          image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:latest
+          imagePullPolicy: Always
+          args:
+            # 指定資料庫的連線名稱，可以在 Cloud SQL 執行個體資訊頁面中查到
+            - lab-project:asia-east1:cloud-sql-auth-proxy-lab
+            - --debug
+            - --debug-logs
+            # 指定要將監控相關資訊輸出到哪個 GCP 專案上
+            - --telemetry-project=lab-project
+            # 這些監控相關的資訊其名稱須加上什麼前綴字，選填
+            # - --telemetry-prefix=cloud-sql-proxy
+            # 可以指定監控相關資訊多久採樣一次，選填
+            # - --telemetry-sample-rate 10000
+          resources:
+            limits:
+              cpu: 100m
+              memory: 200Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
+          volumeMounts:
+            - name: service-account-secret
+              mountPath: /secrets/
+              readOnly: true
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - SYS_ADMIN
+            runAsGroup: 1000
+            runAsNonRoot: true
+            runAsUser: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+
+---
+# service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: cloud-sql-auth-proxy-lab
+  namespace: monitoring-labs
+spec:
+  type: ClusterIP
+  selector:
+    app: cloud-sql-auth-proxy-lab
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
