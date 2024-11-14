@@ -66,7 +66,7 @@ spec:
             - lab-project:asia-east1:cloud-sql-auth-proxy-lab
             - --debug
             - --debug-logs
-            # 指定要將監控相關資訊輸出到哪個 GCP 專案上
+            # 指定要將監控相關資訊輸出到哪個 GCP 專案上，填入專案 ID
             - --telemetry-project=lab-project
             # 這些監控相關的資訊其名稱須加上什麼前綴字，選填
             # - --telemetry-prefix=cloud-sql-proxy
